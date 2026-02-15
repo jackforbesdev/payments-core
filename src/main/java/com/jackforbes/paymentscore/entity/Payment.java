@@ -1,6 +1,9 @@
 package com.jackforbes.paymentscore.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -20,7 +23,8 @@ public class Payment {
     private String currency;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "payment_state")
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private PaymentState state;
 
     @Column(name = "captured_amount", nullable = false)
