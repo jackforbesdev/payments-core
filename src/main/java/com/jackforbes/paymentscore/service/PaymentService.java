@@ -2,7 +2,7 @@ package com.jackforbes.paymentscore.service;
 
 import com.jackforbes.paymentscore.entity.Payment;
 import com.jackforbes.paymentscore.repo.PaymentRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -25,5 +25,10 @@ public class PaymentService {
         Instant now = Instant.now(clock);
         Payment payment = Payment.authorised(UUID.randomUUID(), amount, currency, now);
         return paymentRepository.save(payment);
+    }
+
+    @Transactional(readOnly = true)
+    public Payment getById(UUID id) {
+        return paymentRepository.findById(id).orElseThrow(() -> new PaymentNotFoundException(id));
     }
 }
