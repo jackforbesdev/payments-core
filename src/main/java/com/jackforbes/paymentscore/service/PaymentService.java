@@ -38,12 +38,11 @@ public class PaymentService {
     }
 
     @Transactional
-    public Payment capture(UUID id, String clientId, String idempotencyKey, long captureAmount) {
+    public CaptureResult capture(UUID id, String clientId, String idempotencyKey, long captureAmount) {
         Instant now = Instant.now(clock);
 
-        // 0) Basic input validation
         if (captureAmount <= 0) {
-            throw new InvalidInputException("capture amount must be > 0");
+            throw new InvalidInputException("captureAmount must be > 0");
         }
 
         String canonical = "CAPTURE|paymentId=" + id + "|amount=" + captureAmount;
@@ -51,15 +50,10 @@ public class PaymentService {
 
         var replay = idempotencyService.checkReplayOrThrow(clientId, idempotencyKey, hash);
         if (replay.isPresent()) {
-            UUID paymentId = replay.get().paymentId();   // <-- typed pointer
-            return paymentRepository.findById(paymentId)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Idempotency record points to missing paymentId=" + paymentId
-                    ));
+            return CaptureResult.replay(replay.get().status(), replay.get().paymentId());
         }
 
-        Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException(id));
+        Payment payment = paymentRepository.findById(id).orElseThrow(() -> new PaymentNotFoundException(id));
 
         if (payment.getState() != PaymentState.AUTHORISED &&
                 payment.getState() != PaymentState.PARTIALLY_CAPTURED) {
@@ -72,11 +66,9 @@ public class PaymentService {
         }
 
         payment.capture(captureAmount, now);
+        paymentRepository.save(payment);
 
-        Payment saved = paymentRepository.save(payment);
-
-        idempotencyService.storeSuccess(clientId, idempotencyKey, hash, 200, saved.getId(), now);
-
-        return saved;
+        idempotencyService.storeSuccess(clientId, idempotencyKey, hash, 200, payment.getId(), now);
+        return CaptureResult.fresh(200, payment.getId());
     }
 }

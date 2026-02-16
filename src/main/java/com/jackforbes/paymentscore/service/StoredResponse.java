@@ -1,6 +1,5 @@
 package com.jackforbes.paymentscore.service;
 
-public record StoredResponse(
-        int status,
-        String bodyJson
-) {}
+import java.util.UUID;
+
+public record StoredResponse(int status, UUID paymentId) {}
