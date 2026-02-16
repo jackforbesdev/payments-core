@@ -5,8 +5,6 @@ import com.jackforbes.paymentscore.service.CaptureResult;
 import com.jackforbes.paymentscore.service.PaymentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,7 +49,9 @@ public class PaymentController {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody CapturePaymentRequest request
     ) {
-        Payment payment = paymentService.capture(id, clientId, idempotencyKey, request.amount());
+        CaptureResult result = paymentService.capture(id, clientId, idempotencyKey, request.amount());
+
+        Payment payment = paymentService.getById(result.paymentId());
         return new PaymentResponse(
                 payment.getId(),
                 payment.getAmount(),

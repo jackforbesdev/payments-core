@@ -1,11 +1,13 @@
 package com.jackforbes.paymentscore.service;
 
 
-public record CaptureResult(boolean replayed, int status, String bodyJson) {
-    public static CaptureResult replay(int status, String bodyJson) {
-        return new CaptureResult(true, status, bodyJson);
+import java.util.UUID;
+
+public record CaptureResult(int status, UUID paymentId, boolean replayed) {
+    public static CaptureResult fresh(int status, UUID paymentId) {
+        return new CaptureResult(status, paymentId, false);
     }
-    public static CaptureResult fresh(int status, String bodyJson) {
-        return new CaptureResult(false, status, bodyJson);
+    public static CaptureResult replay(int status, UUID paymentId) {
+        return new CaptureResult(status, paymentId, true);
     }
 }
