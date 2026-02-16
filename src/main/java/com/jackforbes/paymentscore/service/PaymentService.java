@@ -1,6 +1,9 @@
 package com.jackforbes.paymentscore.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jackforbes.paymentscore.api.PaymentResponse;
 import com.jackforbes.paymentscore.entity.Payment;
+import com.jackforbes.paymentscore.entity.PaymentState;
 import com.jackforbes.paymentscore.repo.PaymentRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
@@ -14,10 +17,12 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final Clock clock;
+    private final IdempotencyService idempotencyService;
 
-    public PaymentService(PaymentRepository paymentRepository, Clock clock) {
+    public PaymentService(PaymentRepository paymentRepository, Clock clock, IdempotencyService idempotencyService) {
         this.paymentRepository = paymentRepository;
         this.clock = clock;
+        this.idempotencyService = idempotencyService;
     }
 
     @Transactional
@@ -30,5 +35,48 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public Payment getById(UUID id) {
         return paymentRepository.findById(id).orElseThrow(() -> new PaymentNotFoundException(id));
+    }
+
+    @Transactional
+    public Payment capture(UUID id, String clientId, String idempotencyKey, long captureAmount) {
+        Instant now = Instant.now(clock);
+
+        // 0) Basic input validation
+        if (captureAmount <= 0) {
+            throw new InvalidInputException("capture amount must be > 0");
+        }
+
+        String canonical = "CAPTURE|paymentId=" + id + "|amount=" + captureAmount;
+        String hash = idempotencyService.hash(canonical);
+
+        var replay = idempotencyService.checkReplayOrThrow(clientId, idempotencyKey, hash);
+        if (replay.isPresent()) {
+            UUID paymentId = replay.get().paymentId();   // <-- typed pointer
+            return paymentRepository.findById(paymentId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Idempotency record points to missing paymentId=" + paymentId
+                    ));
+        }
+
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new PaymentNotFoundException(id));
+
+        if (payment.getState() != PaymentState.AUTHORISED &&
+                payment.getState() != PaymentState.PARTIALLY_CAPTURED) {
+            throw new InvalidTransitionException("Illegal capture in state " + payment.getState());
+        }
+
+        long newCaptured = payment.getCapturedAmount() + captureAmount;
+        if (newCaptured > payment.getAmount()) {
+            throw new InvalidTransitionException("Capture would exceed authorised amount");
+        }
+
+        payment.capture(captureAmount, now);
+
+        Payment saved = paymentRepository.save(payment);
+
+        idempotencyService.storeSuccess(clientId, idempotencyKey, hash, 200, saved.getId(), now);
+
+        return saved;
     }
 }
