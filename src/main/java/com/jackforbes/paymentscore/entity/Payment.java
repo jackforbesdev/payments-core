@@ -72,4 +72,12 @@ public class Payment {
         payment.version = 0;
         return payment;
     }
+
+    public void capture(long amount, Instant now) {
+        this.capturedAmount += amount;
+        this.updatedAt = now;
+        if(this.capturedAmount == this.amount) this.state = PaymentState.CAPTURED;
+        else this.state = PaymentState.PARTIALLY_CAPTURED;
+
+    }
 }

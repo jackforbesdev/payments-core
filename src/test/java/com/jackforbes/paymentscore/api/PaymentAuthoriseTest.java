@@ -1,28 +1,29 @@
 package com.jackforbes.paymentscore.api;
 
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
-class PaymentAuthoriseIT {
+class PaymentAuthoriseTest {
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.2")
             .withDatabaseName("payments")
             .withUsername("payments")
             .withPassword("payments");
@@ -33,9 +34,7 @@ class PaymentAuthoriseIT {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
 
-
         registry.add("spring.flyway.enabled", () -> true);
-
         registry.add("spring.docker.compose.enabled", () -> false);
     }
 
@@ -61,19 +60,19 @@ class PaymentAuthoriseIT {
                 .andExpect(jsonPath("$.updatedAt").isNotEmpty());
     }
 
-    // Error Tests
-
     @Test
     void get_returns200_forExistingPayment() throws Exception {
         String response = mvc.perform(post("/payments/authorise")
-        .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                        {"amount":1234,"currency":GBP}
-                        """))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount":1234,"currency":"GBP"}
+                                """))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
-        String id = response.replaceAll(".*\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+        String id = JsonPath.read(response, "$.id");
 
         mvc.perform(get("/payments/" + id))
                 .andExpect(status().isOk())

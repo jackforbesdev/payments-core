@@ -11,9 +11,13 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.UUID;
+
 
 @Service
 public class IdempotencyService {
+
+    public record Replay(int status, UUID paymentId) {}
 
     private final IdempotencyKeyRepository repo;
 
@@ -32,31 +36,39 @@ public class IdempotencyService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<StoredResponse> checkReplayOrThrow(
-            String clientId,
-            String idemKey,
-            String requestHash
-    ) {
+    public Optional<Replay> checkReplayOrThrow(String clientId, String idemKey, String requestHash) {
         var id = new IdempotencyKeyId(clientId, idemKey);
+
         return repo.findById(id).map(existing -> {
             if (!existing.getRequestHash().equals(requestHash)) {
-                throw new IdempotencyMistmatchException(
+                throw new IdempotencyMismatchException(
                         "clientId=" + clientId + " reused Idempotency-Key with different request"
                 );
             }
-            return new StoredResponse(existing.getResponseStatus(), existing.getResponseBody());
+            return new Replay(existing.getResponseStatus(), existing.getPaymentId());
         });
     }
 
-    public void storeSuccess (
+    @Transactional
+    public void storeSuccess(
             String clientId,
             String idemKey,
             String requestHash,
             int responseStatus,
-            String responseBody,
+            UUID paymentId,
             Instant now
     ) {
         var id = new IdempotencyKeyId(clientId, idemKey);
-        var record = new IdempotencyKeyRecord(id, requestHash, responseStatus, responseBody, now);
+
+        var record = new IdempotencyKeyRecord(
+                id,
+                requestHash,
+                responseStatus,
+                now,
+                paymentId
+        );
+
+        repo.save(record);
     }
+
 }

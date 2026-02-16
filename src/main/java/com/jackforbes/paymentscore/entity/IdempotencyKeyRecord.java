@@ -4,9 +4,11 @@ package com.jackforbes.paymentscore.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "idempotency_keys")
@@ -21,29 +23,31 @@ public class IdempotencyKeyRecord {
     @Column(name = "response_status", nullable = false)
     private int responseStatus;
 
-    @Column(name = "response_body", nullable = false, columnDefinition = "jsonb")
-    private String responseBody;
+    @Column(name = "payment_id", nullable = false)
+    private UUID paymentId;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     protected IdempotencyKeyRecord() {}
 
-    public IdempotencyKeyRecord(IdempotencyKeyId id,
-                                String requestHash,
-                                int responseStatus,
-                                String responseBody,
-                                Instant createdAt) {
+    public IdempotencyKeyRecord(
+            IdempotencyKeyId id,
+            String requestHash,
+            int responseStatus,
+            Instant createdAt,
+            UUID paymentId
+    ) {
         this.id = id;
         this.requestHash = requestHash;
         this.responseStatus = responseStatus;
-        this.responseBody = responseBody;
         this.createdAt = createdAt;
+        this.paymentId = paymentId;
     }
 
     public IdempotencyKeyId getId() { return id; }
     public String getRequestHash() { return requestHash; }
     public int getResponseStatus() { return responseStatus; }
-    public String getResponseBody() { return responseBody; }
     public Instant getCreatedAt() { return createdAt; }
+    public UUID getPaymentId() { return paymentId; }
 }

@@ -25,17 +25,14 @@ public class IdempotencyKeyId implements Serializable {
     public String getClientId() { return clientId; }
     public String getIdemKey() { return idemKey; }
 
-    @Override
-    public boolean equals(Object o) {
+    @Override public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        IdempotencyKeyId that = (IdempotencyKeyId) o;
-        return Objects.equals(clientId, that.clientId)
-                && Objects.equals(idemKey, that.idemKey);
+        if (!(o instanceof IdempotencyKeyId that)) return false;
+        return Objects.equals(clientId, that.clientId) &&
+                Objects.equals(idemKey, that.idemKey);
     }
 
-    @Override
-    public int hashCode() {
+    @Override public int hashCode() {
         return Objects.hash(clientId, idemKey);
     }
 }
