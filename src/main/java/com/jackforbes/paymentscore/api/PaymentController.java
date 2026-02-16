@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,6 +40,26 @@ public class PaymentController {
                 payment.getCreatedAt(),
                 payment.getUpdatedAt()
         );
+    }
+
+    @PostMapping("/{id}/capture")
+    public PaymentResponse capture(
+            @PathVariable UUID id,
+            @RequestHeader("X-Client-Id") String clientId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody CapturePaymentRequest request
+    ) {
+        throw new UnsupportedOperationException();
+    }
+
+    @PostMapping("/{id}/refund")
+    public PaymentResponse refund(
+            @PathVariable UUID id,
+            @RequestHeader("X-Client-Id") String clientId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody RefundPaymentRequest request
+    ) {
+        throw new UnsupportedOperationException();
     }
 
     @GetMapping("/{id}")
