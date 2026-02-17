@@ -14,13 +14,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.UUID;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
-class PaymentCaptureTest {
+class PaymentRefundTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
@@ -41,10 +41,11 @@ class PaymentCaptureTest {
     MockMvc mvc;
 
     @Test
-    void capture_fullAmount_transitionsToCaptured() throws Exception {
+    void refund_fullCapturedAmount_transitionsToRefunded() throws Exception {
         String paymentId = authoriseAndExtractId(1234, "GBP");
+        capture(paymentId, 1234);
 
-        mvc.perform(post("/payments/" + paymentId + "/capture")
+        mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -53,15 +54,16 @@ class PaymentCaptureTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(paymentId))
-                .andExpect(jsonPath("$.state").value("CAPTURED"))
-                .andExpect(jsonPath("$.capturedAmount").value(1234));
+                .andExpect(jsonPath("$.state").value("REFUNDED"))
+                .andExpect(jsonPath("$.refundedAmount").value(1234));
     }
 
     @Test
-    void capture_partialAmount_transitionsToPartiallyCaptured() throws Exception {
+    void refund_partialAmount_transitionsToPartiallyRefunded() throws Exception {
         String paymentId = authoriseAndExtractId(1234, "GBP");
+        capture(paymentId, 1234);
 
-        mvc.perform(post("/payments/" + paymentId + "/capture")
+        mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -69,15 +71,16 @@ class PaymentCaptureTest {
                                 {"amount":100}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.state").value("PARTIALLY_CAPTURED"))
-                .andExpect(jsonPath("$.capturedAmount").value(100));
+                .andExpect(jsonPath("$.state").value("PARTIALLY_REFUNDED"))
+                .andExpect(jsonPath("$.refundedAmount").value(100));
     }
 
     @Test
-    void capture_secondCapture_completesToCaptured() throws Exception {
+    void refund_secondRefund_completesToRefunded() throws Exception {
         String paymentId = authoriseAndExtractId(1234, "GBP");
+        capture(paymentId, 1234);
 
-        mvc.perform(post("/payments/" + paymentId + "/capture")
+        mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -85,10 +88,10 @@ class PaymentCaptureTest {
                                 {"amount":100}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.state").value("PARTIALLY_CAPTURED"))
-                .andExpect(jsonPath("$.capturedAmount").value(100));
+                .andExpect(jsonPath("$.state").value("PARTIALLY_REFUNDED"))
+                .andExpect(jsonPath("$.refundedAmount").value(100));
 
-        mvc.perform(post("/payments/" + paymentId + "/capture")
+        mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -96,20 +99,21 @@ class PaymentCaptureTest {
                                 {"amount":1134}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.state").value("CAPTURED"))
-                .andExpect(jsonPath("$.capturedAmount").value(1234));
+                .andExpect(jsonPath("$.state").value("REFUNDED"))
+                .andExpect(jsonPath("$.refundedAmount").value(1234));
     }
 
     @Test
-    void capture_exceedsAuthorisedAmount_returns409ProblemDetail() throws Exception {
+    void refund_exceedsCapturedAmount_returns409ProblemDetail() throws Exception {
         String paymentId = authoriseAndExtractId(1234, "GBP");
+        capture(paymentId, 100); // only captured 100
 
-        mvc.perform(post("/payments/" + paymentId + "/capture")
+        mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"amount":2000}
+                                {"amount":200}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -118,20 +122,10 @@ class PaymentCaptureTest {
     }
 
     @Test
-    void capture_inCapturedState_returns409ProblemDetail() throws Exception {
+    void refund_beforeAnyCapture_returns409ProblemDetail() throws Exception {
         String paymentId = authoriseAndExtractId(1234, "GBP");
 
-        mvc.perform(post("/payments/" + paymentId + "/capture")
-                        .header("X-Client-Id", "clientA")
-                        .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"amount":1234}
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.state").value("CAPTURED"));
-
-        mvc.perform(post("/payments/" + paymentId + "/capture")
+        mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -144,11 +138,40 @@ class PaymentCaptureTest {
     }
 
     @Test
-    void capture_sameIdempotencyKey_sameRequest_isReplayedAndDoesNotDoubleCapture() throws Exception {
+    void refund_inRefundedState_returns409ProblemDetail() throws Exception {
         String paymentId = authoriseAndExtractId(1234, "GBP");
+        capture(paymentId, 1234);
+
+        mvc.perform(post("/payments/" + paymentId + "/refund")
+                        .header("X-Client-Id", "clientA")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount":1234}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("REFUNDED"));
+
+        mvc.perform(post("/payments/" + paymentId + "/refund")
+                        .header("X-Client-Id", "clientA")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount":1}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSITION"));
+    }
+
+    @Test
+    void refund_sameIdempotencyKey_sameRequest_isReplayedAndDoesNotDoubleRefund() throws Exception {
+        String paymentId = authoriseAndExtractId(1234, "GBP");
+        capture(paymentId, 1234);
+
         String idemKey = UUID.randomUUID().toString();
 
-        String first = mvc.perform(post("/payments/" + paymentId + "/capture")
+        String first = mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", idemKey)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -156,10 +179,10 @@ class PaymentCaptureTest {
                                 {"amount":100}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.capturedAmount").value(100))
+                .andExpect(jsonPath("$.refundedAmount").value(100))
                 .andReturn().getResponse().getContentAsString();
 
-        String second = mvc.perform(post("/payments/" + paymentId + "/capture")
+        String second = mvc.perform(post("/payments/" + paymentId + "/refund")
                         .header("X-Client-Id", "clientA")
                         .header("Idempotency-Key", idemKey)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -167,10 +190,23 @@ class PaymentCaptureTest {
                                 {"amount":100}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.capturedAmount").value(100))
+                .andExpect(jsonPath("$.refundedAmount").value(100))
                 .andReturn().getResponse().getContentAsString();
 
         org.junit.jupiter.api.Assertions.assertEquals(first, second);
+    }
+
+    // ---------- helpers ----------
+
+    private void capture(String paymentId, long amount) throws Exception {
+        mvc.perform(post("/payments/" + paymentId + "/capture")
+                        .header("X-Client-Id", "clientA")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount":%d}
+                                """.formatted(amount)))
+                .andExpect(status().isOk());
     }
 
     private String authoriseAndExtractId(long amount, String currency) throws Exception {
