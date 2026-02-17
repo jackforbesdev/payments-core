@@ -7,6 +7,7 @@ import com.jackforbes.paymentscore.service.PaymentNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -61,6 +62,16 @@ public class ApiExceptionHandler {
         pd.setTitle("Idempotency key reused");
         pd.setDetail(ex.getMessage());
         pd.setProperty("code", "IDEMPOTENCY_KEY_REUSED");
+        pd.setProperty("path", request.getRequestURI());
+        return pd;
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+        ProblemDetail pd = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        pd.setTitle("Concurrent update");
+        pd.setDetail("The payment was modified by another request. Please retry.");
+        pd.setProperty("code", "CONCURRENT_MODIFICATION");
         pd.setProperty("path", request.getRequestURI());
         return pd;
     }
