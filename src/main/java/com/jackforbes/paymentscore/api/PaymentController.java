@@ -3,6 +3,7 @@ package com.jackforbes.paymentscore.api;
 import com.jackforbes.paymentscore.entity.Payment;
 import com.jackforbes.paymentscore.service.CaptureResult;
 import com.jackforbes.paymentscore.service.PaymentService;
+import com.jackforbes.paymentscore.service.RefundResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -71,7 +72,19 @@ public class PaymentController {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody RefundPaymentRequest request
     ) {
-        throw new UnsupportedOperationException();
+        RefundResult result = paymentService.refund(id, clientId, idempotencyKey, request.amount());
+
+        Payment payment = paymentService.getById(result.paymentId());
+        return new PaymentResponse(
+                payment.getId(),
+                payment.getAmount(),
+                payment.getCurrency(),
+                payment.getState(),
+                payment.getCapturedAmount(),
+                payment.getRefundedAmount(),
+                payment.getCreatedAt(),
+                payment.getUpdatedAt()
+        );
     }
 
     @GetMapping("/{id}")

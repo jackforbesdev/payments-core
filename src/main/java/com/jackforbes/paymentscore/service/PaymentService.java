@@ -71,4 +71,44 @@ public class PaymentService {
         idempotencyService.storeSuccess(clientId, idempotencyKey, hash, 200, payment.getId(), now);
         return CaptureResult.fresh(200, payment.getId());
     }
+
+
+    @Transactional
+    public RefundResult refund(UUID id, String clientId, String idempotencyKey, long refundAmount) {
+        Instant now = Instant.now(clock);
+
+        if (refundAmount <= 0) {
+            throw new InvalidInputException("refundAmount must be > 0");
+        }
+
+        String canonical = "REFUND|paymentId=" + id + "|amount=" + refundAmount;
+        String hash = idempotencyService.hash(canonical);
+
+        var replay = idempotencyService.checkReplayOrThrow(clientId, idempotencyKey, hash);
+        if (replay.isPresent()) {
+            return RefundResult.replay(replay.get().status(), replay.get().paymentId());
+        }
+
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new PaymentNotFoundException(id));
+
+        if (payment.getState() != PaymentState.CAPTURED &&
+                payment.getState() != PaymentState.PARTIALLY_CAPTURED &&
+                payment.getState() != PaymentState.PARTIALLY_REFUNDED) {
+            throw new InvalidTransitionException("Illegal refund in state " + payment.getState());
+        }
+
+        long newRefunded = payment.getRefundedAmount() + refundAmount;
+
+        if (newRefunded > payment.getCapturedAmount()) {
+            throw new InvalidTransitionException("Refund would exceed captured amount");
+        }
+
+        payment.refund(refundAmount, now);
+        paymentRepository.save(payment);
+
+        idempotencyService.storeSuccess(clientId, idempotencyKey, hash, 200, payment.getId(), now);
+        return RefundResult.fresh(200, payment.getId());
+    }
+
 }

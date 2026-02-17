@@ -80,4 +80,11 @@ public class Payment {
         else this.state = PaymentState.PARTIALLY_CAPTURED;
 
     }
+
+    public void refund(long amount, Instant now) {
+        this.refundedAmount += amount;
+        this.updatedAt = now;
+        if (this.refundedAmount == this.capturedAmount) this.state = PaymentState.REFUNDED;
+        else this.state = PaymentState.PARTIALLY_REFUNDED;
+    }
 }
